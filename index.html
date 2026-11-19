@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="it" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CardioTrack - Pressione e Battiti</title>
+    
+    <!-- Meta tag per Web App installabile su iOS e Android -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CardioTrack">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4f46e5">
+
+    <!-- Icone vettoriali e placeholder per Home Screen -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%234f46e5'/><path d='M256 432l-29-26.4C124 313.2 56 251.6 56 176 56 114.4 104.4 66 166 66c34.8 0 68.2 16.2 90 41.8C277.8 82.2 311.2 66 346 66c61.6 0 110 48.4 110 110 0 75.6-68 137.2-171 229.6L256 432z' fill='%23fda4af'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%234f46e5'/><path d='M256 432l-29-26.4C124 313.2 56 251.6 56 176 56 114.4 104.4 66 166 66c34.8 0 68.2 16.2 90 41.8C277.8 82.2 311.2 66 346 66c61.6 0 110 48.4 110 110 0 75.6-68 137.2-171 229.6L256 432z' fill='%23fda4af'/></svg>">
+    <link id="pwaManifest" rel="manifest">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white !important; color: black !important; }
+            .print-container { box-shadow: none !important; border: none !important; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full flex flex-col font-sans antialiased">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-md no-print">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/15 p-2.5 rounded-2xl shadow-inner">
+                    <i class="fa-solid fa-heart-pulse text-2xl text-rose-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">CardioTrack</h1>
+                    <p class="text-xs text-indigo-200">Web App Pressione & Battiti</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+                <button id="installAppBtn" onclick="installPWA()" class="hidden bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-mobile-screen-button"></i> Installa App
+                </button>
+                <button onclick="toggleGuideModal()" class="bg-indigo-500 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-circle-question"></i> Guida & Installa
+                </button>
+                <button onclick="exportDataJSON()" class="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-download"></i> Backup
+                </button>
+                <label class="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-upload"></i> Importa
+                    <input type="file" id="importFile" accept=".json" class="hidden" onchange="importDataJSON(event)">
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-6xl w-full mx-auto px-4 py-6 space-y-6">
+
+        <!-- Notification Box -->
+        <div id="notification" class="hidden p-4 rounded-xl text-sm font-medium transition-all shadow-sm no-print flex items-center justify-between">
+            <span id="notificationText"></span>
+            <button onclick="hideNotification()" class="text-current opacity-70 hover:opacity-100 p-1"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Custom Confirm Modal (No browser confirm/alert) -->
+        <div id="confirmModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 space-y-4">
+                <div class="flex items-center gap-3 text-rose-600">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    <h3 class="font-bold text-slate-800 text-base">Conferma Eliminazione</h3>
+                </div>
+                <p class="text-sm text-slate-600">Sei sicuro di voler eliminare definitivamente questa misurazione?</p>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="closeConfirmModal()" class="px-4 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Annulla</button>
+                    <button id="confirmDeleteBtn" class="px-4 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition shadow-sm">Elimina</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Form Section -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 no-print">
+            <h2 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-circle-plus text-indigo-600"></i> Registra Nuova Misurazione
+            </h2>
+            <form id="readingForm" onsubmit="saveReading(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Data e Ora</label>
+                    <input type="datetime-local" id="dateTimeInput" required
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Massima (Sistolica - mmHg)</label>
+                    <input type="number" id="sysInput" placeholder="es. 120" min="60" max="250" required
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Minima (Diastolica - mmHg)</label>
+                    <input type="number" id="diaInput" placeholder="es. 80" min="40" max="150" required
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Battiti (BPM)</label>
+                    <input type="number" id="pulseInput" placeholder="es. 72" min="30" max="200" required
+                           class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2.5 px-4 rounded-xl transition shadow-sm hover:shadow flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i> Salva Misura
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Summary & Reports Section -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 print-container">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 no-print border-b border-slate-100 pb-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-indigo-600"></i> Riepiloghi e Stampa
+                    </h2>
+                </div>
+                
+                <!-- Controls: Period, View Mode, Print -->
+                <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    <!-- Period Presets -->
+                    <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap">
+                        <button onclick="setPeriod('week')" id="btnWeek" class="px-3 py-1.5 text-xs font-medium rounded-lg transition bg-white text-indigo-600 shadow-sm">Settimana</button>
+                        <button onclick="setPeriod('month')" id="btnMonth" class="px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900">Mese</button>
+                        <button onclick="setPeriod('year')" id="btnYear" class="px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900">Anno</button>
+                        <button onclick="setPeriod('custom')" id="btnCustom" class="px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900"><i class="fa-regular fa-calendar-days mr-1"></i>Personalizza</button>
+                    </div>
+
+                    <!-- Mode Selector (Table / Graph) -->
+                    <div class="bg-slate-100 p-1 rounded-xl flex">
+                        <button onclick="setViewMode('table')" id="btnTableMode" class="px-3 py-1.5 text-xs font-medium rounded-lg transition bg-white text-indigo-600 shadow-sm"><i class="fa-solid fa-table"></i> Tabella</button>
+                        <button onclick="setViewMode('graph')" id="btnGraphMode" class="px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900"><i class="fa-solid fa-chart-area"></i> Grafico</button>
+                    </div>
+
+                    <!-- Print Button -->
+                    <button onclick="window.print()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 ml-auto sm:ml-0">
+                        <i class="fa-solid fa-print"></i> Stampa Periodo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Custom Date Range Selector Bar -->
+            <div id="customDateBar" class="hidden bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 mb-6 no-print flex flex-col sm:flex-row items-center gap-3">
+                <span class="text-xs font-semibold text-indigo-900 flex items-center gap-1.5">
+                    <i class="fa-solid fa-filter text-indigo-600"></i> Filtra intervallo:
+                </span>
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <div class="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                        <label for="startDateInput" class="text-xs text-slate-600 font-medium">Dal:</label>
+                        <input type="date" id="startDateInput" onchange="loadReadings()" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500 w-full">
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                        <label for="endDateInput" class="text-xs text-slate-600 font-medium">Al:</label>
+                        <input type="date" id="endDateInput" onchange="loadReadings()" class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500 w-full">
+                    </div>
+                </div>
+                <span id="customCountBadge" class="text-xs text-indigo-700 font-medium sm:ml-auto"></span>
+            </div>
+
+            <!-- Print Header info (Visible only when printing) -->
+            <div class="print-only mb-6">
+                <div class="flex justify-between items-end border-b-2 border-slate-800 pb-3">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-900">Report Pressione Sanguigna e Battiti</h1>
+                        <p id="printPeriodLabel" class="text-sm font-medium text-slate-700 mt-1">Periodo: Settimanale (Ultimi 7 giorni)</p>
+                    </div>
+                    <div class="text-right text-xs text-slate-500">
+                        <p>Generato con CardioTrack</p>
+                        <p id="printDateGenerated"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Averages / Statistics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div class="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Media Sistolica (Max)</span>
+                    <div id="avgSys" class="text-2xl font-bold text-slate-800 mt-1">- <span class="text-xs font-normal text-slate-500">mmHg</span></div>
+                </div>
+                <div class="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Media Diastolica (Min)</span>
+                    <div id="avgDia" class="text-2xl font-bold text-slate-800 mt-1">- <span class="text-xs font-normal text-slate-500">mmHg</span></div>
+                </div>
+                <div class="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
+                    <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Media Battiti (BPM)</span>
+                    <div id="avgPulse" class="text-2xl font-bold text-slate-800 mt-1">- <span class="text-xs font-normal text-slate-500">BPM</span></div>
+                </div>
+            </div>
+
+            <!-- Table View Container -->
+            <div id="tableViewContainer" class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50/50">
+                            <th class="py-3 px-4 rounded-l-xl">Data e Ora</th>
+                            <th class="py-3 px-4">Sistolica (Max)</th>
+                            <th class="py-3 px-4">Diastolica (Min)</th>
+                            <th class="py-3 px-4">Battiti</th>
+                            <th class="py-3 px-4">Categoria</th>
+                            <th class="py-3 px-4 text-right rounded-r-xl no-print">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="readingsTableBody" class="divide-y divide-slate-100 text-sm">
+                        <!-- Dynamic rows populated via JS -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="hidden py-12 text-center text-slate-400">
+                    <i class="fa-solid fa-folder-open text-3xl mb-2"></i>
+                    <p class="text-sm">Nessuna misurazione registrata per il periodo selezionato.</p>
+                </div>
+            </div>
+
+            <!-- Graph View Container -->
+            <div id="graphViewContainer" class="hidden relative h-80 w-full mt-4">
+                <canvas id="pressureChart"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal "Guida & Installazione Web App" -->
+    <div id="guideModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 relative max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen-button text-indigo-600"></i> Installa come Web App
+                </h3>
+                <button onclick="toggleGuideModal()" class="text-slate-400 hover:text-slate-700 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-sm text-slate-600 space-y-3">
+                <div class="bg-indigo-50 p-3.5 rounded-xl border border-indigo-100 flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shrink-0 shadow">
+                        <i class="fa-solid fa-heart text-rose-300 text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-slate-800">CardioTrack App</p>
+                        <p class="text-xs text-slate-600">Icona pronta per la schermata Home del tuo smartphone o tablet.</p>
+                    </div>
+                </div>
+
+                <p><strong>Su iPhone / iPad (Safari):</strong><br>Tocca il tasto <strong>Condividi</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-indigo-600"></i>) nella barra in basso, scorri e seleziona <strong>"Aggiungi alla schermata Home"</strong>.</p>
+                
+                <p><strong>Su Android (Chrome):</strong><br>Tocca i <strong>3 puntini</strong> in alto a destra e seleziona <strong>"Aggiungi a schermata Home"</strong> o <strong>"Installa app"</strong>.</p>
+                
+                <p><strong>Selezione e Stampa:</strong><br>Usa i tasti <em>Settimana, Mese, Anno</em> oppure clicca su <strong>Personalizza</strong> per scegliere le date esatte (Dal / Al). Cliccando su <strong>Stampa Periodo</strong> otterrai un report impaginato pronto per il tuo medico.</p>
+
+                <p><strong>Privacy Totale:</strong><br>Tutti i parametri sono salvati esclusivamente nella memoria locale del dispositivo (<code class="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600">LocalStorage</code>).</p>
+            </div>
+            <div class="pt-2 flex justify-end">
+                <button onclick="toggleGuideModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-5 py-2.5 rounded-xl transition">Ho capito</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer info -->
+    <footer class="text-center py-4 text-xs text-slate-400 no-print">
+        <p>CardioTrack Web App • Dati salvati in locale sul tuo dispositivo.</p>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        const STORAGE_KEY = 'cardiotrack_readings_v1';
+        let currentPeriod = 'week';
+        let currentMode = 'table';
+        let chartInstance = null;
+        let deferredPrompt = null;
+        let pendingDeleteId = null;
+
+        // Genera dinamicamente il Web App Manifest per l'installazione PWA con icona
+        function setupPWAManifest() {
+            const iconSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%234f46e5'/><path d='M256 432l-29-26.4C124 313.2 56 251.6 56 176 56 114.4 104.4 66 166 66c34.8 0 68.2 16.2 90 41.8C277.8 82.2 311.2 66 346 66c61.6 0 110 48.4 110 110 0 75.6-68 137.2-171 229.6L256 432z' fill='%23fda4af'/></svg>`;
+            const iconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(iconSvg)}`;
+
+            const manifest = {
+                name: "CardioTrack - Pressione e Battiti",
+                short_name: "CardioTrack",
+                description: "Registro personale per pressione sanguigna e battiti cardiaci",
+                start_url: window.location.href,
+                display: "standalone",
+                background_color: "#f8fafc",
+                theme_color: "#4f46e5",
+                icons: [
+                    {
+                        src: iconUrl,
+                        sizes: "192x192",
+                        type: "image/svg+xml",
+                        purpose: "any maskable"
+                    },
+                    {
+                        src: iconUrl,
+                        sizes: "512x512",
+                        type: "image/svg+xml",
+                        purpose: "any maskable"
+                    }
+                ]
+            };
+
+            const stringManifest = JSON.stringify(manifest);
+            const blob = new Blob([stringManifest], { type: 'application/json' });
+            const manifestURL = URL.createObjectURL(blob);
+            document.getElementById('pwaManifest').setAttribute('href', manifestURL);
+        }
+
+        // Intercetta l'evento di installazione nativa sui browser compatibili
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtn = document.getElementById('installAppBtn');
+            if (installBtn) installBtn.classList.remove('hidden');
+        });
+
+        async function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    document.getElementById('installAppBtn').classList.add('hidden');
+                }
+                deferredPrompt = null;
+            } else {
+                toggleGuideModal();
+            }
+        }
+
+        window.onload = function() {
+            setupPWAManifest();
+            setDefaultDateTime();
+            initCustomDateDefaults();
+            loadReadings();
+        };
+
+        function setDefaultDateTime() {
+            const now = new Date();
+            const tzOffset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - tzOffset)).toISOString().slice(0, 16);
+            document.getElementById('dateTimeInput').value = localISOTime;
+        }
+
+        function initCustomDateDefaults() {
+            const now = new Date();
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(now.getDate() - 30);
+
+            document.getElementById('endDateInput').value = now.toISOString().slice(0, 10);
+            document.getElementById('startDateInput').value = thirtyDaysAgo.toISOString().slice(0, 10);
+        }
+
+        function getReadings() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveReadingsToStorage(readings) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
+        }
+
+        function saveReading(event) {
+            event.preventDefault();
+            const dateTime = document.getElementById('dateTimeInput').value;
+            const sys = parseInt(document.getElementById('sysInput').value);
+            const dia = parseInt(document.getElementById('diaInput').value);
+            const pulse = parseInt(document.getElementById('pulseInput').value);
+
+            if (sys <= dia) {
+                showNotification('Errore: La pressione sistolica (massima) deve essere superiore alla diastolica (minima).', 'error');
+                return;
+            }
+
+            const newReading = {
+                id: Date.now().toString(),
+                dateTime: dateTime,
+                sys: sys,
+                dia: dia,
+                pulse: pulse
+            };
+
+            const readings = getReadings();
+            readings.push(newReading);
+            readings.sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
+            
+            saveReadingsToStorage(readings);
+            showNotification('Misurazione registrata con successo!', 'success');
+            
+            document.getElementById('readingForm').reset();
+            setDefaultDateTime();
+            loadReadings();
+        }
+
+        // Gestione eliminazione con modale personalizzata (senza confirm() nativo)
+        function requestDeleteReading(id) {
+            pendingDeleteId = id;
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            document.getElementById('confirmDeleteBtn').onclick = confirmDelete;
+        }
+
+        function closeConfirmModal() {
+            pendingDeleteId = null;
+            document.getElementById('confirmModal').classList.add('hidden');
+        }
+
+        function confirmDelete() {
+            if (!pendingDeleteId) return;
+            let readings = getReadings();
+            readings = readings.filter(r => r.id !== pendingDeleteId);
+            saveReadingsToStorage(readings);
+            closeConfirmModal();
+            showNotification('Misurazione eliminata.', 'success');
+            loadReadings();
+        }
+
+        function getBloodPressureCategory(sys, dia) {
+            if (sys < 120 && dia < 80) {
+                return { text: 'Ottimale', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+            } else if ((sys >= 120 && sys <= 139) || (dia >= 80 && dia <= 89)) {
+                if (sys >= 130 || dia >= 85) {
+                    return { text: 'Normale-Alta', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+                }
+                return { text: 'Normale', color: 'bg-teal-50 text-teal-700 border-teal-200' };
+            } else if ((sys >= 140 && sys <= 159) || (dia >= 90 && dia <= 99)) {
+                return { text: 'Ipertensione Grado 1', color: 'bg-orange-50 text-orange-700 border-orange-200' };
+            } else if ((sys >= 160 && sys <= 179) || (dia >= 100 && dia <= 109)) {
+                return { text: 'Ipertensione Grado 2', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+            } else {
+                return { text: 'Ipertensione Grado 3', color: 'bg-red-100 text-red-800 border-red-300' };
+            }
+        }
+
+        function filterReadingsByPeriod(readings) {
+            const now = new Date();
+            
+            if (currentPeriod === 'custom') {
+                const startVal = document.getElementById('startDateInput').value;
+                const endVal = document.getElementById('endDateInput').value;
+
+                const startDate = startVal ? new Date(startVal + 'T00:00:00') : new Date('1970-01-01T00:00:00');
+                const endDate = endVal ? new Date(endVal + 'T23:59:59') : new Date('2099-12-31T23:59:59');
+
+                return readings.filter(r => {
+                    const rDate = new Date(r.dateTime);
+                    return rDate >= startDate && rDate <= endDate;
+                });
+            }
+
+            return readings.filter(r => {
+                const rDate = new Date(r.dateTime);
+                const diffTime = now - rDate;
+                const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+                if (currentPeriod === 'week') return diffDays <= 7;
+                if (currentPeriod === 'month') return diffDays <= 30;
+                if (currentPeriod === 'year') return diffDays <= 365;
+                return true;
+            });
+        }
+
+        function setPeriod(period) {
+            currentPeriod = period;
+            ['week', 'month', 'year', 'custom'].forEach(p => {
+                const btn = document.getElementById(`btn${p.charAt(0).toUpperCase() + p.slice(1)}`);
+                if (p === period) {
+                    btn.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition bg-white text-indigo-600 shadow-sm";
+                } else {
+                    btn.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900";
+                }
+            });
+
+            const customBar = document.getElementById('customDateBar');
+            if (period === 'custom') {
+                customBar.classList.remove('hidden');
+            } else {
+                customBar.classList.add('hidden');
+            }
+
+            loadReadings();
+        }
+
+        function updatePrintLabels(filteredCount) {
+            const nowStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            document.getElementById('printDateGenerated').innerText = `Stampato il: ${nowStr}`;
+
+            if (currentPeriod === 'custom') {
+                const startVal = document.getElementById('startDateInput').value;
+                const endVal = document.getElementById('endDateInput').value;
+                const sFormatted = startVal ? new Date(startVal).toLocaleDateString('it-IT') : 'Inizio';
+                const eFormatted = endVal ? new Date(endVal).toLocaleDateString('it-IT') : 'Oggi';
+                
+                document.getElementById('printPeriodLabel').innerText = `Periodo selezionato: dal ${sFormatted} al ${eFormatted} (${filteredCount} misurazioni)`;
+                document.getElementById('customCountBadge').innerText = `${filteredCount} misurazioni trovate`;
+            } else {
+                const labels = {
+                    week: 'Settimanale (Ultimi 7 giorni)',
+                    month: 'Mensile (Ultimi 30 giorni)',
+                    year: 'Annuale (Ultimi 365 giorni)'
+                };
+                document.getElementById('printPeriodLabel').innerText = `Periodo: ${labels[currentPeriod]} (${filteredCount} misurazioni)`;
+            }
+        }
+
+        function setViewMode(mode) {
+            currentMode = mode;
+            const btnTable = document.getElementById('btnTableMode');
+            const btnGraph = document.getElementById('btnGraphMode');
+            const tableContainer = document.getElementById('tableViewContainer');
+            const graphContainer = document.getElementById('graphViewContainer');
+
+            if (mode === 'table') {
+                btnTable.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition bg-white text-indigo-600 shadow-sm";
+                btnGraph.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900";
+                tableContainer.classList.remove('hidden');
+                graphContainer.classList.add('hidden');
+            } else {
+                btnGraph.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition bg-white text-indigo-600 shadow-sm";
+                btnTable.className = "px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-600 hover:text-slate-900";
+                tableContainer.classList.add('hidden');
+                graphContainer.classList.remove('hidden');
+                renderGraph();
+            }
+        }
+
+        function loadReadings() {
+            const allReadings = getReadings();
+            const filtered = filterReadingsByPeriod(allReadings);
+
+            updatePrintLabels(filtered.length);
+
+            if (filtered.length > 0) {
+                const sumSys = filtered.reduce((acc, r) => acc + r.sys, 0);
+                const sumDia = filtered.reduce((acc, r) => acc + r.dia, 0);
+                const sumPulse = filtered.reduce((acc, r) => acc + r.pulse, 0);
+
+                document.getElementById('avgSys').innerHTML = `${Math.round(sumSys / filtered.length)} <span class="text-xs font-normal text-slate-500">mmHg</span>`;
+                document.getElementById('avgDia').innerHTML = `${Math.round(sumDia / filtered.length)} <span class="text-xs font-normal text-slate-500">mmHg</span>`;
+                document.getElementById('avgPulse').innerHTML = `${Math.round(sumPulse / filtered.length)} <span class="text-xs font-normal text-slate-500">BPM</span>`;
+            } else {
+                document.getElementById('avgSys').innerHTML = `- <span class="text-xs font-normal text-slate-500">mmHg</span>`;
+                document.getElementById('avgDia').innerHTML = `- <span class="text-xs font-normal text-slate-500">mmHg</span>`;
+                document.getElementById('avgPulse').innerHTML = `- <span class="text-xs font-normal text-slate-500">BPM</span>`;
+            }
+
+            const tbody = document.getElementById('readingsTableBody');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                filtered.forEach(r => {
+                    const formattedDate = new Date(r.dateTime).toLocaleString('it-IT', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                    const cat = getBloodPressureCategory(r.sys, r.dia);
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50/80 transition border-b border-slate-100 last:border-0";
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 font-medium text-slate-700">${formattedDate}</td>
+                        <td class="py-3 px-4 font-semibold text-slate-900">${r.sys} <span class="text-xs font-normal text-slate-500">mmHg</span></td>
+                        <td class="py-3 px-4 font-semibold text-slate-900">${r.dia} <span class="text-xs font-normal text-slate-500">mmHg</span></td>
+                        <td class="py-3 px-4 text-slate-700">${r.pulse} <span class="text-xs font-normal text-slate-500">BPM</span></td>
+                        <td class="py-3 px-4">
+                            <span class="inline-block px-2.5 py-1 text-xs font-medium rounded-full border ${cat.color}">
+                                ${cat.text}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-right no-print">
+                            <button onclick="requestDeleteReading('${r.id}')" class="text-slate-400 hover:text-rose-600 transition p-2" title="Elimina">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            if (currentMode === 'graph') {
+                renderGraph();
+            }
+        }
+
+        function renderGraph() {
+            const allReadings = getReadings();
+            const filtered = filterReadingsByPeriod(allReadings).reverse();
+
+            const labels = filtered.map(r => new Date(r.dateTime).toLocaleString('it-IT', {
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+            }));
+            const sysData = filtered.map(r => r.sys);
+            const diaData = filtered.map(r => r.dia);
+            const pulseData = filtered.map(r => r.pulse);
+
+            const ctx = document.getElementById('pressureChart').getContext('2d');
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Sistolica (Max)',
+                            data: sysData,
+                            borderColor: 'rgb(225, 29, 72)',
+                            backgroundColor: 'rgba(225, 29, 72, 0.1)',
+                            tension: 0.3,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Diastolica (Min)',
+                            data: diaData,
+                            borderColor: 'rgb(79, 70, 229)',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            tension: 0.3,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Battiti (BPM)',
+                            data: pulseData,
+                            borderColor: 'rgb(13, 148, 136)',
+                            backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                            tension: 0.3,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: { grid: { color: 'rgba(0, 0, 0, 0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function exportDataJSON() {
+            const readings = getReadings();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(readings, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `cardiotrack_backup_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showNotification('Backup esportato con successo!', 'success');
+        }
+
+        function importDataJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (Array.isArray(importedData)) {
+                        saveReadingsToStorage(importedData);
+                        loadReadings();
+                        showNotification('Dati importati correttamente!', 'success');
+                    } else {
+                        showNotification('File di backup non valido.', 'error');
+                    }
+                } catch (err) {
+                    showNotification('Errore durante la lettura del file.', 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function toggleGuideModal() {
+            const modal = document.getElementById('guideModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            const text = document.getElementById('notificationText');
+            
+            text.innerText = message;
+            notification.className = `p-4 rounded-xl text-sm font-medium transition-all shadow-sm no-print flex items-center justify-between ${
+                type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`;
+            notification.classList.remove('hidden');
+
+            setTimeout(() => { hideNotification(); }, 4000);
+        }
+
+        function hideNotification() {
+            document.getElementById('notification').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
